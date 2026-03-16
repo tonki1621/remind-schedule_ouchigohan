@@ -9,7 +9,7 @@ import uuid
 # ==========================================
 GAS_URL = "https://script.google.com/macros/s/AKfycbzvpHihTpY7AVWat9-kbnIgIVdy30hin-aPNAVQhHa5XeX8iJqSx3TqPoHdbpoqvFiNqw/exec"
 
-st.set_page_config(page_title="子ども食堂 リマインド管理", page_icon="🍛", layout="centered")
+st.set_page_config(page_title="おうちごはん リマインド管理", page_icon="🍛", layout="centered")
 
 # ==========================================
 # UX改善: ロード中表示＆デザイン用CSS
@@ -28,7 +28,7 @@ st.markdown("""
         .stButton>button { background-color: #E67E22; color: white; border-radius: 8px; width: 100%; font-weight: bold; transition: 0.2s; }
         .stButton>button:hover { background-color: #D35400; transform: translateY(-2px); }
     </style>
-    <h1 class="main-title">🍛 子ども食堂 リマインド管理</h1>
+    <h1 class="main-title">🍛 おうちごはん リマインド管理</h1>
     <hr>
 """, unsafe_allow_html=True)
 
