@@ -7,7 +7,7 @@ import uuid
 # ==========================================
 # 💡 設定
 # ==========================================
-GAS_URL = "https://script.google.com/macros/s/★★ここを書き換える★★/exec"
+GAS_URL = "https://script.google.com/macros/s/AKfycbzvpHihTpY7AVWat9-kbnIgIVdy30hin-aPNAVQhHa5XeX8iJqSx3TqPoHdbpoqvFiNqw/exec"
 
 st.set_page_config(page_title="子ども食堂 リマインド管理", page_icon="🍛", layout="centered")
 
