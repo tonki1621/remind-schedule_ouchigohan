@@ -7,22 +7,36 @@ import uuid
 # ==========================================
 # 💡 設定
 # ==========================================
-GAS_URL = "https://script.google.com/macros/s/AKfycbzvpHihTpY7AVWat9-kbnIgIVdy30hin-aPNAVQhHa5XeX8iJqSx3TqPoHdbpoqvFiNqw/exec"
+GAS_URL = "https://script.google.com/macros/s/★★ここを書き換える★★/exec"
 
-st.set_page_config(page_title="おうちごはん リマインド管理", page_icon="🍛", layout="centered")
+st.set_page_config(page_title="子ども食堂 リマインド管理", page_icon="🍛", layout="centered")
 
+# ==========================================
+# UX改善: ロード中表示＆デザイン用CSS
+# ==========================================
 st.markdown("""
     <style>
-    .main-title { color: #E67E22; text-align: center; font-family: 'Helvetica Neue', Arial, sans-serif; }
-    .stButton>button { background-color: #E67E22; color: white; border-radius: 8px; width: 100%; font-weight: bold; }
-    .stButton>button:hover { background-color: #D35400; color: white; }
+        /* いただいた「通信中」のポップアップCSS */
+        .stDeployStatus, [data-testid="stStatusWidget"] label { display: none !important; }
+        [data-testid="stStatusWidget"] { visibility: visible !important; display: flex !important; position: fixed !important; top: 50% !important; left: 50% !important; transform: translate(-50%, -50%) !important; background: rgba(255, 255, 255, 0.95) !important; color: #333 !important; padding: 20px 40px !important; border-radius: 12px !important; z-index: 999999 !important; box-shadow: 0 8px 24px rgba(0,0,0,0.15) !important; border: 2px solid #E67E22 !important; text-align: center !important; justify-content: center !important; }
+        [data-testid="stStatusWidget"]::after { content: "⏳ 通信中 \\A 処理しています..."; white-space: pre-wrap; font-size: 20px !important; font-weight: bold !important; line-height: 1.5 !important; }
+        @media (max-width: 600px) { [data-testid="stStatusWidget"] { padding: 15px 20px !important; width: 80% !important; } [data-testid="stStatusWidget"]::after { font-size: 16px !important; } }
+        .stApp, .stApp [data-testid="stAppViewBlockContainer"], div[data-testid="stVerticalBlock"], div[data-testid="stForm"], iframe { opacity: 1 !important; transition: none !important; filter: none !important; }
+
+        /* 全体デザイン */
+        .main-title { color: #E67E22; text-align: center; font-family: 'Helvetica Neue', Arial, sans-serif; }
+        .stButton>button { background-color: #E67E22; color: white; border-radius: 8px; width: 100%; font-weight: bold; transition: 0.2s; }
+        .stButton>button:hover { background-color: #D35400; transform: translateY(-2px); }
     </style>
-    <h1 class="main-title">🍛 おうちごはん リマインド管理</h1>
+    <h1 class="main-title">🍛 子ども食堂 リマインド管理</h1>
     <hr>
 """, unsafe_allow_html=True)
 
 JST = timezone(timedelta(hours=+9), 'JST')
 
+# ==========================================
+# 💡 GASとの通信用関数
+# ==========================================
 def fetch_from_gas(action, payload=None):
     data = {"action": action}
     if payload: data["payload"] = payload
@@ -37,29 +51,40 @@ def fetch_from_gas(action, payload=None):
         st.error(f"通信エラー: {e}")
         return None
 
+# 🚀 高速化：データを1回の通信でまとめて取得し、60秒間キャッシュ（一時保存）する
+@st.cache_data(ttl=60)
+def fetch_all_data():
+    return fetch_from_gas("get_all_data")
+
+# データに変更があった時にキャッシュを消去して最新にする関数
+def clear_cache_and_rerun():
+    fetch_all_data.clear()
+    st.rerun()
+
 # ==========================================
 # 💡 データの事前取得
 # ==========================================
-groups_data = fetch_from_gas("get_groups") or []
-templates_data = fetch_from_gas("get_templates") or []
-reminders_data = fetch_from_gas("get_reminders") or []
+# まとめて取得したデータを振り分ける
+all_data = fetch_all_data() or {"groups": [], "templates": [], "reminders": []}
+
+groups_data = all_data.get("groups", [])
+templates_data = all_data.get("templates", [])
+reminders_data = all_data.get("reminders", [])
 
 group_dict = {f"{g['group_name']}": g['group_id'] for g in groups_data}
-group_rev_dict = {v: k for k, v in group_dict.items()} # IDから名前を引く用
+group_rev_dict = {v: k for k, v in group_dict.items()}
 
 # タブの作成
-tab1, tab2, tab3 = st.tabs(["📅 リマインド予約", "📋 一覧・編集", "⚙️ 設定 (グループ・テンプレート)"])
+tab1, tab2, tab3 = st.tabs(["📅 リマインド予約", "📋 一覧・編集", "⚙️ 設定"])
 
 # ==========================================
 # タブ1：リマインド予約
 # ==========================================
 with tab1:
     st.subheader("新しいリマインドを予約")
-    
     if not group_dict:
         st.warning("⚠️ グループが登録されていません。「設定」タブを確認してください。")
     else:
-        # テンプレート選択（フォームの外に置くことでリアルタイム反映させる）
         template_options = ["(テンプレートを使用しない)"] + [t['name'] for t in templates_data]
         selected_template_name = st.selectbox("📝 テンプレートを読み込む", template_options)
         
@@ -74,7 +99,6 @@ with tab1:
             with col1: send_date = st.date_input("送信日", value=datetime.now(JST) + timedelta(days=1))
             with col2: send_time = st.time_input("送信時間", value=datetime.strptime("17:00", "%H:%M").time())
             
-            # テンプレートが選ばれたら初期値にセットされる
             message_text = st.text_area("メッセージ内容", value=default_message, height=150)
             
             if st.form_submit_button("予約する"):
@@ -90,7 +114,7 @@ with tab1:
                     }
                     if fetch_from_gas("add_reminder", payload) == "success":
                         st.success("✅ 予約しました！")
-                        st.rerun() # 画面をリロードして一覧を更新
+                        clear_cache_and_rerun() # キャッシュを消して再読み込み
 
 # ==========================================
 # タブ2：予約一覧・編集
@@ -98,22 +122,17 @@ with tab1:
 with tab2:
     st.subheader("予約済みのリマインド")
     if reminders_data:
-        # 未送信のものだけを編集対象としてリストアップ
         pending_reminders = [r for r in reminders_data if r['status'] == '']
-        
         if pending_reminders:
             st.write("▼ 編集または削除したいリマインドを選択してください")
             edit_options = { f"{r['send_time']} - {r['message'][:10]}...": r for r in pending_reminders }
             selected_edit_label = st.selectbox("対象の予約", list(edit_options.keys()))
             target_r = edit_options[selected_edit_label]
             
-            # 編集フォーム
             with st.expander("✏️ 選択した予約を編集・削除", expanded=True):
                 e_date_str, e_time_str = target_r['send_time'].split(" ")
                 e_date = datetime.strptime(e_date_str, "%Y/%m/%d").date()
                 e_time = datetime.strptime(e_time_str, "%H:%M:%S").time()
-                
-                # 現在のグループ名を取得（取得できない場合はリストの最初）
                 current_g_name = group_rev_dict.get(target_r['target_group_id'], list(group_dict.keys())[0])
                 
                 new_group = st.selectbox("送信先", list(group_dict.keys()), index=list(group_dict.keys()).index(current_g_name), key="e_group")
@@ -129,14 +148,13 @@ with tab2:
                         payload = {"id": target_r['id'], "send_time": new_dt_str, "message": new_message, "target_group_id": group_dict[new_group]}
                         if fetch_from_gas("update_reminder", payload) == "success":
                             st.success("更新しました！")
-                            st.rerun()
+                            clear_cache_and_rerun()
                 with col_btn2:
                     if st.button("🗑️ この予約を削除"):
                         if fetch_from_gas("delete_reminder", {"id": target_r['id']}) == "success":
                             st.warning("削除しました。")
-                            st.rerun()
+                            clear_cache_and_rerun()
 
-        # 一覧表の表示
         st.markdown("---")
         df = pd.DataFrame(reminders_data)
         df['group_name'] = df['target_group_id'].map(group_rev_dict).fillna("不明")
@@ -148,11 +166,15 @@ with tab2:
         st.info("現在予約されているリマインドはありません。")
 
 # ==========================================
-# タブ3：設定 (グループ・テンプレート)
+# タブ3：設定
 # ==========================================
 with tab3:
+    st.subheader("🔄 データの最新化")
+    if st.button("サーバーから最新データを取得"):
+        clear_cache_and_rerun()
+
+    st.markdown("---")
     st.subheader("LINEグループ名の変更")
-    st.caption("ボットが参加しているグループに分かりやすい名前を付けます。")
     if groups_data:
         edit_group_target = st.selectbox("名前を変更するグループを選択", [g['group_name'] for g in groups_data])
         target_g_id = group_dict[edit_group_target]
@@ -160,12 +182,11 @@ with tab3:
         if st.button("グループ名を更新"):
             if fetch_from_gas("update_group", {"group_id": target_g_id, "group_name": new_g_name}) == "success":
                 st.success("グループ名を更新しました！")
-                st.rerun()
+                clear_cache_and_rerun()
     else:
         st.write("グループがありません。ボットをLINEグループに招待してください。")
 
     st.markdown("---")
-    
     st.subheader("メッセージテンプレート管理")
     with st.expander("➕ 新しいテンプレートを作成"):
         t_name = st.text_input("テンプレート名 (例: 通常開催用)")
@@ -175,7 +196,7 @@ with tab3:
                 payload = {"id": "TPL-" + str(uuid.uuid4())[:8], "name": t_name, "content": t_content}
                 if fetch_from_gas("save_template", payload) == "success":
                     st.success("保存しました！")
-                    st.rerun()
+                    clear_cache_and_rerun()
             else:
                 st.error("名前と内容の両方を入力してください。")
                 
@@ -189,4 +210,4 @@ with tab3:
             with col_t2:
                 if st.button("削除", key=f"del_{t['id']}"):
                     if fetch_from_gas("delete_template", {"id": t['id']}) == "success":
-                        st.rerun()
+                        clear_cache_and_rerun()
